@@ -2809,6 +2809,8 @@ bool IceSh::icewmAction()
         { "suspend",    ICEWM_ACTION_SUSPEND },
         { "winoptions", ICEWM_ACTION_WINOPTIONS },
         { "keys",       ICEWM_ACTION_RELOADKEYS },
+        { "icewmbg",    ICEWM_ACTION_ICEWMBG },
+        { "refresh",    ICEWM_ACTION_REFRESH },
     };
     for (Symbol sym : sa) {
         if (0 == strcmp(*argp, sym.name)) {
@@ -3536,7 +3538,7 @@ void IceSh::showProperty(Window window, Atom atom, const char* prefix) {
         return;
     }
 
-    YProperty prop(window, atom, AnyPropertyType, 64);
+    YProperty prop(window, atom, AnyPropertyType, 256);
     if (prop.status() == Success && prop.data<void>()) {
         if (prop.format() == 8) {
             const char* name(atomName(atom));
@@ -4165,8 +4167,10 @@ void IceSh::unexpected()
 void IceSh::flags()
 {
     bool act = false;
+    bool man = false;
 
     while (haveArg()) {
+        man = false;
         if (conditional()) {
             /*ignore*/;
             act = true;
@@ -4183,7 +4187,7 @@ void IceSh::flags()
         else {
             act = true;
             if (icewmAction())
-                ;
+                man = true;
             else if (windowList)
                 parseAction();
             else if (selecting | filtering) {
@@ -4206,6 +4210,10 @@ void IceSh::flags()
     if (act == false) {
         msg(_("No actions specified."));
         throw 1;
+    }
+    if (man == true && windowList == false) {
+        // make windowList non-empty.
+        windowList += root;
     }
 }
 
@@ -5388,23 +5396,24 @@ void IceSh::parseAction()
         }
         else if (isAction("focusmodel", 0)) {
             FOREACH_WINDOW(window) {
+                bool input = true;
                 xsmart<XWMHints> h(XGetWMHints(display, window));
-                if (h) {
-                    bool input = (h->flags & InputHint) && (h->input & True);
-                    Atom* prot = nullptr;
-                    int count = 0;
-                    bool take = false;
-                    if (XGetWMProtocols(display, window, &prot, &count)) {
-                        for (int i = 0; i < count; ++i) {
-                            if (prot[i] == ATOM_WM_TAKE_FOCUS) {
-                                take = true;
-                            }
+                if (h && hasbit(h->flags, InputHint)) {
+                    input = (h->input & True);
+                }
+                Atom* prot = nullptr;
+                int count = 0;
+                bool take = false;
+                if (XGetWMProtocols(display, window, &prot, &count)) {
+                    for (int i = 0; i < count; ++i) {
+                        if (prot[i] == ATOM_WM_TAKE_FOCUS) {
+                            take = true;
                         }
                     }
-                    printf("0x%-8lx focusmodel %s\n", *window,
-                            input ? take ? "Locally" : "Passive"
-                                : take ? "Globally" : "NoInput");
                 }
+                printf("0x%-8lx focusmodel %s\n", *window,
+                        input ? take ? "Locally" : "Passive"
+                            : take ? "Globally" : "NoInput");
             }
         }
         else if (isAction("motif", 0)) {

@@ -952,6 +952,8 @@ void YWindowManager::handleClientMessage(const XClientMessageEvent &message) {
         case ICEWM_ACTION_ABOUT:
         case ICEWM_ACTION_WINOPTIONS:
         case ICEWM_ACTION_RELOADKEYS:
+        case ICEWM_ACTION_ICEWMBG:
+        case ICEWM_ACTION_REFRESH:
             smActionListener->handleSMAction(action);
             break;
         }
@@ -3620,7 +3622,7 @@ void YWindowManager::setKeyboard(mstring keyboard) {
             exp.we_offs = 1;
             if (wordexp(keyboard, &exp, WRDE_NOCMD | WRDE_DOOFFS) == 0) {
                 exp.we_wordv[0] = program;
-                wmapp->runProgram(program, exp.we_wordv);
+                wmapp->runProgram(path, exp.we_wordv);
                 exp.we_wordv[0] = nullptr;
                 wordfree(&exp);
             }
@@ -3824,16 +3826,19 @@ void YWindowManager::updateScreenSize(XEvent *event) {
     XRRUpdateConfiguration(event);
 
     if (updateXineramaInfo(nw, nh)) {
+        bool resize = (nw != width() || nh != height());
         MSG(("xrandr: %d %d", nw, nh));
-        setSize(nw, nh);
-        setDesktopGeometry();
+        if (resize) {
+            setSize(nw, nh);
+            setDesktopGeometry();
+        }
 
         if (taskBar) {
             taskBar->updateLocation();
         }
         updateWorkArea();
 
-        if (taskBar && pagerShowPreview) {
+        if (taskBar && pagerShowPreview && resize) {
             taskBar->workspacesUpdateButtons();
         }
         if (taskBar) {
@@ -3843,10 +3848,13 @@ void YWindowManager::updateScreenSize(XEvent *event) {
             edges[i]->setGeometry();
 
         /// TODO #warning "make something better"
-        if (arrangeWindowsOnScreenSizeChange) {
+        if (arrangeWindowsOnScreenSizeChange && resize) {
             wmActionListener->actionPerformed(actionArrange, 0);
         }
-        manager->arrangeIcons();
+        if (resize) {
+            arrangeIcons();
+            smActionListener->handleSMAction(ICEWM_ACTION_ICEWMBG);
+        }
     }
 
     refresh();
